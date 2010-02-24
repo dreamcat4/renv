@@ -1,0 +1,119 @@
+= RENV (Ruby ENV)
+
+== Introduction
+
+Renv is a tutorial to show how to implement the bash environment hack. Renv will do very little on its own. The point of renv is to allow you to alter the current shell's environment, but without needing to spawn a new shell. Renv is just the glue code you need to sit around the outside of your program to communicate with the shell.
+
+== Description
+
+The renv gem (when finished) will install a small commandline program. Renv demonstrates how to manupilate the environment of the parent process' shell from within ruby. There are probably a variety of uses for renv. However the most notable case is for writing something akin to the Ruby Version Manager (rvm), or Homebrew (brew for mac). Indeed, this trick of renv is re-worked from rvm. However whilst the rvm program is implemented entirely in bash, renv aims to give you a skeleton app that allows all the program functionality to be implemented in ruby, or other chosen language. This allows the bash parts of renv to be kept very small, and never need to be modified or changed.
+
+== Getting started
+
+	$ git clone http://github.com/dreamcat4/renv.git
+	# Then add a source line for sourcing $renv_path/bin/renv to /etc/profile
+	# add $renv_path/bin/renv to $PATH, Restart your login shell
+
+Renv is not a gem yet, but it will be made into a gem in time. When that *eventually* happens (one day), you will just type 'gem install renv'. Hopefully these inconveniences won't stop you from looking at the renv code and using it in your own projects.
+
+== Usage
+
+    $ renv [renv_args]
+    $ sudo [sudo_args] renv [renv_args]
+
+== Requirements
+
+- A default / system ruby installation on your system to start with
+- Those shell interpreters which supports...
+  - getopts builtin shell function
+  - ${:-} (string replacement)
+  - if [[ ]] (double brackets)
+  - $() (execute and return stdout in-place)
+  - $(()) (arithmetic expr)
+  - ${VAR[*]} (bash arrays)
+
+So in other words, "pretty much just bash"
+
+- Tested interpreters:
+  - bash version 3+
+
+== How Renv works
+
+==== (not implemented yet) Executing "gem install renv" will...
+- Install the helper script "renv-install"
+
+==== (not implemented yet) Executing "renv-install" will...
+ - Copy the contents of the renv gem into the destination directory
+ - Install a bourne-shell compatible login hook into all available rc files, profile, etc
+ - Hook renv into the system ruby / stock ruby
+ - Replace the current login shell with a new one, thereby loading the shell function
+
+==== Calling "renv" bash function will...
+ - Invoke the renv() shell function, passing its args
+ - In turn, invoke the system ruby wth the "renv.rb" ruby program
+ - Try to source the stdout of the ruby program, as a bash script
+
+==== "renv.rb" will...
+- Parse arguments
+- Branch out, and execute appropriate commands, actions, etc
+- Modify the environment by printing RENV[] hash to stdout
+- exit and return control back to the current login shell
+
+== Sudo Philosophy
+
+If using sudo, make sure your '/etc/sudoers' file contains the right configuration line. This will preserve the environment variables, and ensure they are available to renv:
+
+    Defaults !env_reset
+
+Renv employs a hook function to filter on the sudo command argument and understand which arguments will be sent to sudo. The arguments after that are seperated and we check to see if the command to run matches a bash hook function with the name "sudo_$commnd".
+
+If our sudo hook function exists, we will run our renv ruby executable through sudo. The sudo hook function will also modify the current shell's environment in the usual way.
+
+One issue with sudo is that is will often through away the current environment and replace it with a very constrained shell environment. To combat this, we bypass sudo with a list of variables to preserve. You specify the list of variables to keep in the bash function 'renv_pass_vars'. These will be those set of environment variables your program acts upon and modifies. (implementation dependant)
+
+Its also worth pointing out that when running renv in sudo mode, any files will be created with root ownership by default. So if you later on run renv unprivelidged, those previously written files cannot be changed. One workaround is to section the read commands to the write subcommands. Then exit with an appropriate error message before attempting to perform any file-based operations. Another choice is to 'chown -R $SUDO_USER $renv_path', at the end of your operations, for those director(ies) under which your command modified. Then the same user will be able to modify those files again later on when un-privelidged.
+
+== Benefits of the renv glue code
+
+- Sudo is fully masked for all its switches, and we can pass our renv variables through sudo
+- Having less bash code means we can gaurantee that paths with spaces will work
+- Therefore okay to reference certain paths like "~/Library/Application Support" etc
+
+== Benefits of using a full-blown programming language in place of bash
+
+- Can use any language, which may be Object-oriented and include libraries
+- Named parameters and argument checking for functions(), which bash/bourne doesnt support
+- Therefore easier to keep cleaner and more compartmentalized programs when not in bash
+- A 'typed' language usually give more specific and exact errors than the shell code can
+- Its possible to write comprehensive unit tests in certain languages, including ruby
+- Freedom to implement any other APIs / interface directly with the native language
+
+== Disadvantages of renv, when going with ruby
+
+- Can be slower to start up the ruby interpreter, which becomes noticable under conditions of low memory and high system load (normally we don't notice)
+- To preserve stdout and stderr, renv must launch ruby a total of twice (2 times)
+- However, soon can be avoided when we implement 1 optional extra bash function
+- Of course, a version of ruby must be installed on your computer to run ruby
+
+Please see next section if any of this bothers you.
+
+== Faster Alternatives to Ruby, other implementation languages for Renv apart from Ruby
+
+The basic renv philosiphy is to do away with having to write the underlying program in bash. Instead, the script to be sourced by the shell is to be generated dynamically as "output", and only after completing successfully / atomically the relevant processing actions, all from the within programs native language. 
+
+Renv uses ruby as the underlying program implementation language. However its possible to use any programming language. For example 'C', 'Python', 'Objective C', 'C++' are all possibilities if you do not wish to use ruby.
+
+Especially interesting are the compiled languages such as 'C' (or similar). Writing your program in those languages will alleviates / reduce any initial startup wait time or "lost time", when the ruby interpreter is loading into memory. C is expecially more effecient, even than bash or bourne shell. Its possible to get quite far with just clib and a few extras.
+
+Otherwise, perhaps consider C++ whith the Boost library which is highly portable amongst many platforms. Of course first of all try writing an example program, call it 'cenv' or 'cppenv', etc. Consider using autoconf and libtool for the compilation step. Also may distribute the precompiled executable.
+
+That said, my stock MRI Ruby 1.8.7 (patchlevel 72) seemed to by far quick enough to cope. And many newer implementations are still continuing to speed up.
+
+== Copyright
+
+Renv is released under BSD License. Its hoped that others will pick up renv and see the value in it, and use it as a starting point for their own projects.
+
+Author: dreamcat4, 2010
+Credit: Wayne E. Seguin, Ruby Version Manager (rvm), 2009-2010
+
+

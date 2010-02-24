@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+
+__sudo_parse_args ()
+{
+	# http://aplawrence.com/Unix/getopts.html
+	# http://www.bash-hackers.org/wiki/doku.php/syntax/arrays
+	ALL_ARGS="$@"
+	SUDO_ARGS[0]=""
+	sa_count=0
+	SUDO_OPTS=":g:p:u:C:U:bhiknsvAEHKLPSV"
+	while getopts "$SUDO_OPTS" flag
+	do
+		# echo "\"$flag\" \"$OPTIND\" \"$OPTARG\""
+		if [[ "$flag" = "?" ]] || [[ "$flag" = ":" ]]; then
+			OPTIND=`expr $OPTIND - 1`			
+			break;
+		else
+			SUDO_ARGS[$sa_count]="-$flag"
+			sa_count=$(($sa_count+1))
+			if [[ "$OPTARG" ]]; then
+				SUDO_ARGS[$sa_count]="$OPTARG"				
+				sa_count=$(($sa_count+1))
+			fi
+		fi
+	done
+	shift $(($OPTIND-1))
+	CMD_ARGS[0]=""
+	ca_count=0
+	for ca in "$@"; do
+		CMD_ARGS[$ca_count]="$ca"
+		ca_count=$(($ca_count+1))		
+	done
+	unset OPTIND
+}
+
+test__sudo_parse_args() {
+	__sudo_parse_args "$@"
+	echo "$ALL_ARGS"
+	echo "${SUDO_ARGS[*]}"
+	echo "${CMD_ARGS[*]}"
+}
+
+sudo_pass_vars() {
+	SUDO_PASS_VARS="$1"
+	for var in $SUDO_PASS_VARS; do
+		# pass_vars="$var='${!var}' $pass_vars"
+		pass_vars="$var=\"${!var}\" $pass_vars"
+	done
+	echo $pass_vars
+}
+
+renv_root() {
+	echo "$(dirname $(dirname ${BASH_SOURCE:-$0}))"
+}
+
+renv_cmd_quoted() {
+	echo "\"$(renv_root)/bin/renv_ruby\" \"$(renv_root)/lib/renv.rb\""
+}
+
+renv_cmd() {
+	eval echo "$(renv_cmd_quoted)"
+}
+
+renv_ruby() {
+	echo "$(renv_root)/bin/renv_ruby"
+}
+
+renv_rb() {
+	echo "$(renv_root)/lib/renv.rb"
+}
+
+renv_debug() {
+	echo "DEBUG"
+}
+
+renv_release() {
+	echo "RELEASE"
+}
+
+renv_dev_mode() {
+	renv_debug
+	# renv_release
+}
+
+renv_req() {
+	REQ="$1"
+	echo "$("$(renv_ruby)" "$(renv_rb)" "--get-$REQ")"	
+}
+
+renv_pass_vars() {
+	if [[ "$(renv_dev_mode)" = "$(renv_debug)" ]]; then
+		sudo_pass_vars "$(renv_req "passvars")"
+	else
+		cat "$(renv_root)/lib/passvars"
+	fi
+}
+
+renv() {
+	sourcefile="$(renv_req "sourcefile")"
+	command "$(renv_ruby)" "$(renv_rb)" "--set-sourcefile" "$sourcefile" "$@"
+	source  "$sourcefile"
+}
+renv "$@"
+
+sudo_renv() {
+	if [[ "${SUDO_ARGS[@]}" ]]; then sudo_args=true; fi
+	if [[ "${CMD_ARGS[@]:1}" ]]; then cmd_args=true; fi
+
+	sourcefile="$(renv_req "sourcefile")"
+	if   [[ ! "$sudo_args" ]] && [[ ! "$cmd_args" ]]; then
+		command sudo $(renv_pass_vars) "$(renv_ruby)" "$(renv_rb)" "--set-sourcefile" "$sourcefile"
+	elif [[ ! "$sudo_args" ]] && [[ "$cmd_args" ]]; then
+		command sudo $(renv_pass_vars) "$(renv_ruby)" "$(renv_rb)" "--set-sourcefile" "$sourcefile" "${CMD_ARGS[@]:1}"
+	elif [[ "$sudo_args" ]] && [[ ! "$cmd_args" ]]; then
+		command sudo "${SUDO_ARGS[@]}" $(renv_pass_vars) "$(renv_ruby)" "$(renv_rb)" "--set-sourcefile" "$sourcefile"
+	elif [[ "$sudo_args" ]] && [[ "$cmd_args" ]]; then
+		command sudo "${SUDO_ARGS[@]}" $(renv_pass_vars) "$(renv_ruby)" "$(renv_rb)" "--set-sourcefile" "$sourcefile" "${CMD_ARGS[@]:1}"
+	fi
+	source "$sourcefile"
+}
+
+sudo() {
+	__sudo_parse_args "$@"
+	if [ $(type -t "${CMD_ARGS[0]}") ] && [ $(type -t "sudo_${CMD_ARGS[0]}") ]; then
+		"sudo_${CMD_ARGS[0]}"
+		return $?
+	fi
+	command sudo "$@"
+	return $?
+}
+
+
+
+

@@ -1,0 +1,6 @@
+
+# This is where renv installs and manages everything in by default.
+renv_path=/opt/renv
+renv_symlink_path=/usr/local/bin
+
+
